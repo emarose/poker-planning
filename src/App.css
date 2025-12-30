@@ -1,20 +1,14 @@
-.App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+html {
+  --s: 64px;
+  /* control the size*/
+  --c1: #4d110a;
+  --c2: #0b2123;
+  --c3: #3b300c;
+  --c4: #361104;
 }
 
 .App-header {
-  background-color: rgb(235,95,10);
+  background-color: rgb(235, 95, 10);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -28,11 +22,10 @@
   color: #61dafb;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.mainBG {
+  background:
+    radial-gradient(var(--c1) 24%, #0000 25%),
+    radial-gradient(var(--c2) 30%, #0000 32%) calc(var(--s)/2) calc(var(--s)/2),
+    repeating-conic-gradient(from 30deg, var(--c3) 0 30deg, var(--c4) 0 25%);
+  background-size: var(--s) var(--s);
 }
