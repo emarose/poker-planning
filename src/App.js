@@ -1,25 +1,495 @@
-import logo from './logo.svg';
-import './App.css';
+import React, { useState, useEffect } from 'react';
 
-function App() {
+// Firebase imports
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, serverTimestamp } from 'firebase/firestore';
+
+// TODO: Replace with your Firebase config from Firebase Console
+const firebaseConfig = {
+  apiKey: "AIzaSyBMYxs5_mEaCVzDyeAjTKJAafkHT_7f94A",
+  authDomain: "poker-planning-c1d24.firebaseapp.com",
+  projectId: "poker-planning-c1d24",
+  storageBucket: "poker-planning-c1d24.firebasestorage.app",
+  messagingSenderId: "375856991794",
+  appId: "1:375856991794:web:d156d23e3a839c2212f62b"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const FIBONACCI_VALUES = [1, 2, 3, 5, 8, "?"];
+const SESSION_ID = 'default-session'; // You can make this dynamic later
+
+export default function PokerPlanningApp() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [nameInput, setNameInput] = useState('');
+  const [players, setPlayers] = useState({});
+  const [sessionData, setSessionData] = useState({ revealed: false, storyTitle: '' });
+  const [storyTitleInput, setStoryTitleInput] = useState('');
+
+  // Listen to all players in real-time
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, 'sessions', SESSION_ID, 'players'),
+      (snapshot) => {
+        const playersData = {};
+        snapshot.forEach((doc) => {
+          playersData[doc.id] = doc.data();
+        });
+        setPlayers(playersData);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // Listen to session state (revealed status and story title)
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      doc(db, 'sessions', SESSION_ID),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setSessionData(data);
+          setStoryTitleInput(data.storyTitle || '');
+        }
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Update story title in Firestore
+  const handleStoryTitleChange = async (e) => {
+    const value = e.target.value;
+    setStoryTitleInput(value);
+    await setDoc(doc(db, 'sessions', SESSION_ID), { ...sessionData, storyTitle: value }, { merge: true });
+  };
+
+  // Add current user to Firestore
+  const handleNameSubmit = async (e) => {
+    e?.preventDefault();
+    if (nameInput.trim()) {
+      const userName = nameInput.trim();
+      // If this is the first player joining, ensure session starts as a new round
+      if (Object.keys(players).length === 0) {
+        await setDoc(doc(db, 'sessions', SESSION_ID), { revealed: false }).catch(() => { });
+      }
+
+      setCurrentUser(userName);
+
+      // Add player to Firestore
+      await setDoc(doc(db, 'sessions', SESSION_ID, 'players', userName), {
+        name: userName,
+        vote: null,
+        timestamp: serverTimestamp()
+      });
+    }
+  };
+
+  // Update vote in Firestore
+  const handleVote = async (value) => {
+    if (!currentUser) return;
+
+    await setDoc(doc(db, 'sessions', SESSION_ID, 'players', currentUser), {
+      name: currentUser,
+      vote: value,
+      timestamp: serverTimestamp()
+    });
+  };
+
+  // Reveal all votes
+  const handleReveal = async () => {
+    await setDoc(doc(db, 'sessions', SESSION_ID), {
+      revealed: true
+    });
+  };
+
+  // Start new round
+  const handleNewRound = async () => {
+    // Reset revealed status
+    await setDoc(doc(db, 'sessions', SESSION_ID), {
+      revealed: false
+    });
+
+    // Clear all votes
+    const playerNames = Object.keys(players);
+    for (const name of playerNames) {
+      await setDoc(doc(db, 'sessions', SESSION_ID, 'players', name), {
+        name: name,
+        vote: null,
+        timestamp: serverTimestamp()
+      });
+    }
+  };
+
+  // Presence: heartbeat + cleanup on unload/unmount
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const playerRef = doc(db, 'sessions', SESSION_ID, 'players', currentUser);
+
+    const heartbeat = () => {
+      // update only the timestamp to indicate presence
+      setDoc(playerRef, { timestamp: serverTimestamp() }, { merge: true }).catch(() => { });
+    };
+
+    // initial heartbeat and periodic updates
+    heartbeat();
+    const hbInterval = setInterval(heartbeat, 10000);
+
+    const removePlayer = () => {
+      // best-effort: try to delete player doc when leaving
+      deleteDoc(playerRef).catch(() => { });
+    };
+
+    window.addEventListener('beforeunload', removePlayer);
+
+    return () => {
+      clearInterval(hbInterval);
+      window.removeEventListener('beforeunload', removePlayer);
+      // attempt to remove on component unmount as well
+      removePlayer();
+    };
+  }, [currentUser]);
+
+  // Client-side prune of stale players (last heartbeat older than ~30s)
+  useEffect(() => {
+    const prune = async () => {
+      const now = Date.now();
+      for (const [name, p] of Object.entries(players)) {
+        const ts = p?.timestamp;
+        let tMillis = 0;
+        if (ts && typeof ts.toMillis === 'function') {
+          tMillis = ts.toMillis();
+        } else if (ts) {
+          tMillis = new Date(ts).getTime();
+        }
+        if (tMillis && now - tMillis > 30000) {
+          await deleteDoc(doc(db, 'sessions', SESSION_ID, 'players', name)).catch(() => { });
+        }
+      }
+    };
+
+    const pruneInterval = setInterval(prune, 20000);
+    return () => clearInterval(pruneInterval);
+  }, [players]);
+
+  const calculateStats = () => {
+    const votes = Object.values(players)
+      .map(p => p.vote)
+      .filter(v => v !== null && v !== undefined && v !== "?");
+
+    if (votes.length === 0) return null;
+
+    const counts = {};
+    votes.forEach(v => {
+      counts[v] = (counts[v] || 0) + 1;
+    });
+    // determine mode(s) and handle ties
+    const maxCount = Math.max(...Object.values(counts));
+    const winners = Object.keys(counts).filter(k => counts[k] === maxCount);
+    const mode = winners.length === 1 ? winners[0] : null; // null indicates no single mode
+    const modeCount = maxCount;
+    const agreement = ((modeCount / votes.length) * 100).toFixed(0);
+    const average = (votes.reduce((a, b) => a + b, 0) / votes.length).toFixed(1);
+
+    return {
+      mode,
+      modeOptions: winners,
+      agreement,
+      average,
+      totalVotes: votes.length,
+      totalPlayers: Object.keys(players).length
+    };
+  };
+
+  // Name Entry Screen
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full">
+          <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
+            🃏 Poker Planning
+          </h1>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Ingresa tu nombre
+              </label>
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleNameSubmit()}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Tu nombre..."
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={handleNameSubmit}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+            >
+              Join Session
+            </button>
+          </div>
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <div className="text-sm text-gray-600 text-center">
+              <div className="font-semibold mb-1">👥 Participantes activos: {Object.keys(players).length}</div>
+              <div className="text-xs">
+                {Object.keys(players).length > 0
+                  && Object.keys(players).join(', ')
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = sessionData.revealed ? calculateStats() : null;
+  const playersList = Object.values(players);
+
+  // Position players around the table
+  const getPlayerPosition = (index, total) => {
+    const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
+    const radius = 45;
+    const x = 50 + radius * Math.cos(angle);
+    const y = 50 + radius * Math.sin(angle);
+    return { x, y };
+  };
+  // Prepare vote counts for the distribution visualization
+  // Build voteCounts and voteToPlayers for distribution panel
+  const voteCounts = {};
+  const voteToPlayers = {};
+  Object.values(players).forEach(p => {
+    const v = p?.vote;
+    if (v !== null && v !== undefined) {
+      voteCounts[v] = (voteCounts[v] || 0) + 1;
+      if (!voteToPlayers[v]) voteToPlayers[v] = [];
+      voteToPlayers[v].push(p.name);
+    }
+  });
+
+  // Sort winners to the top for vote distribution
+  let voteEntries = Object.entries(voteCounts);
+  if (stats && stats.modeOptions && stats.modeOptions.length > 0) {
+    voteEntries = [
+      ...voteEntries.filter(([val]) => stats.modeOptions.includes(val)),
+      ...voteEntries.filter(([val]) => !stats.modeOptions.includes(val)),
+    ];
+  }
+  const totalVotes = Object.values(voteCounts).reduce((a, b) => a + b, 0);
+
+  // Find players who have not voted
+  const notVotedPlayers = playersList.filter(p => p.vote === null || p.vote === undefined);
+
+  // Show alert if only one player left to vote and not revealed
+  const showOneLeftAlert = !sessionData.revealed && notVotedPlayers.length === 1;
+  const oneLeftName = showOneLeftAlert ? notVotedPlayers[0].name?.replace(/\b\w/g, c => c.toUpperCase()) : '';
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
+    <div className="h-screen bg-orange-950 flex flex-col mainBG">
+      {/* Alert: Only one player left to vote */}
+      {showOneLeftAlert && (
+        <div className="fixed left-0 top-1/4 z-40 bg-secondary-orange text-white font-bold px-6 py-4 rounded-r-lg shadow-lg text-lg flex items-center animate-pulse" style={{ minWidth: '220px' }}>
+          <span className="mr-2">⚠️ Falta votar:</span> <span className="ml-1 underline">{oneLeftName}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="bg-secondary-orange/80 backdrop-blur-sm text-white p-4 shadow-lg">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold">🃏 Poker Planning</h1>
+          <div className="text-sm">
+            <span className="font-semibold">{currentUser}</span>
+            <span className="ml-4 opacity-75">👥 {playersList.length} participantes</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Story Title Input */}
+      <div className="w-full flex flex-col items-center mt-4 mb-2">
+        <input
+          type="text"
+          value={storyTitleInput}
+          onChange={handleStoryTitleChange}
+          placeholder="Ingresa el título de la historia en votación"
+          className="w-full max-w-md px-4 py-2 rounded border border-secondary-orange focus:ring-2 focus:ring-secondary-orange focus:border-transparent text-lg text-center mb-2 text-secondary-orange bg-secondary-light"
+        />
+      </div>
+      {/* Main Game Area + Vote Distribution Side-by-Side */}
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-6 overflow-auto">
+        <div className="relative w-full max-w-2xl aspect-square flex-shrink-0">
+          {/* Poker Table */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-3/4 h-3/4 bg-table-wood rounded-full border-[10px] border-table-rim shadow-2xl flex items-center justify-center">
+              <div className="w-[90%] h-[90%] bg-table-felt rounded-full flex items-center justify-center shadow-inner">
+                <div className="text-center">
+                  {sessionData.storyTitle && (
+                    <div className="text-lg font-semibold text-white mb-2 truncate max-w-xs mx-auto" title={sessionData.storyTitle}>
+                      {sessionData.storyTitle}
+                    </div>
+                  )}
+                  {!sessionData.revealed ? (
+                    <button
+                      onClick={handleReveal}
+                      disabled={playersList.filter(p => p.vote !== null).length === 0}
+                      className="bg-secondary-orange hover:bg-accent-light disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-full text-xl shadow-lg transition duration-200 transform hover:scale-105"
+                    >
+                      🎭 Revelar
+                    </button>
+                  ) : (
+                    <div className="text-white space-y-3">
+                      <div className="text-4xl font-bold">{stats?.mode || '-'}</div>
+                      <div className="text-lg font-semibold">Más Votado</div>
+                      <div className="text-sm space-y-1">
+                        <p>{stats?.agreement}% Acuerdo</p>
+                        <p>Promedio: {stats?.average}</p>
+                        <p>{stats?.totalVotes} / {stats?.totalPlayers} votaron</p>
+                      </div>
+                      <button
+                        onClick={handleNewRound}
+                        className="mt-4 bg-secondary-orange hover:bg-accent-light text-white font-semibold py-2 px-6 rounded-full text-sm transition duration-200"
+                      >
+                        Reiniciar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Player Cards */}
+          {playersList.map((player, index) => {
+            const pos = getPlayerPosition(index, playersList.length);
+            const hasVoted = player.vote !== null && player.vote !== undefined;
+            const isCurrentUser = player.name === currentUser;
+
+            return (
+              <div
+                key={player.name}
+                className="absolute transform -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  {/* Card */}
+                  <div
+                    className={`w-16 h-24 rounded-lg shadow-lg flex items-center justify-center font-bold text-xl transition-all duration-300 ${hasVoted
+                        ? sessionData.revealed
+                          ? 'bg-white text-gray-900'
+                          : 'bg-white text-secondary-orange border-2 border-secondary-orange'
+                        : 'bg-white/20 text-white/40 border-2 border-white/40 border-dashed'
+                      }`}
+                  >
+                    {hasVoted
+                      ? sessionData.revealed
+                        ? player.vote
+                        : (
+                          <span className="flex flex-col items-center">
+                            <span className="text-3xl">✔️</span>
+                            <span className="text-xs mt-1 text-green-700 font-semibold">Listo</span>
+                          </span>
+                        )
+                      : '?'}
+                  </div>
+                  {/* Name */}
+                  <div
+                    className={`text-base font-semibold px-4 py-2 rounded-full ${isCurrentUser
+                      ? 'bg-secondary-orange text-white'
+                      : 'bg-white/90 text-gray-900'
+                      }`}
+                    style={{ minWidth: 60, minHeight: 32 }}
+                  >
+                    {player?.name?.replace(/\b\w/g, c => c.toUpperCase())}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Vote Distribution (floating panel on desktop, below on mobile) */}
+      {sessionData.revealed && totalVotes > 0 && (
+        <div
+          className="fixed md:absolute z-30 right-0 md:right-8 top-auto md:top-1/2 md:-translate-y-1/2 w-full md:w-80 max-w-full md:max-w-xs mt-6 md:mt-0 flex-shrink-0 pointer-events-none md:pointer-events-auto"
+          style={{ bottom: '6.5rem' }}
         >
-          Learn React
-        </a>
-      </header>
+          <div className="bg-accent-light p-4 rounded-lg border border-secondary-orange shadow-2xl backdrop-blur-md">
+            <h3 className="text-secondary-orange font-semibold mb-3">Distribución de votos</h3>
+            <div className="space-y-3">
+              {(() => {
+                // Find the last winner index (after sorting winners to top)
+                const winnerCount = stats && stats.modeOptions ? stats.modeOptions.length : 0;
+                return voteEntries.map(([val, count], idx) => {
+                  const pct = Math.round((count / totalVotes) * 100);
+                  const isWinner = stats && stats.modeOptions && stats.modeOptions.includes(val);
+                  // Separator after last winner if there are non-winners
+                  const separator = winnerCount > 0 && idx === winnerCount - 1 && voteEntries.length > winnerCount;
+                  const voters = (voteToPlayers[val] || []).map(name => (
+                    <span key={name} className="text-yellow-400 text-xs font-semibold mr-2">
+                      {name?.replace(/\b\w/g, c => c.toUpperCase())}
+                    </span>
+                  ));
+                  return (
+                    <React.Fragment key={val}>
+                      <div className={`flex items-center gap-3 ${isWinner ? 'font-bold' : ''}`}>
+                        <div
+                          className={`w-10 h-14 flex items-center justify-center rounded-lg border shadow font-bold text-lg bg-white/90 ${isWinner ? 'border-secondary-orange text-secondary-orange' : 'border-gray-300 text-gray-900'}`}
+                          style={{ minWidth: 40 }}
+                        >
+                          {val}
+                        </div>
+                        <div className={`flex-1 rounded h-6 overflow-hidden border ${isWinner ? 'bg-accent-light border-secondary-orange' : 'bg-gray-200 border-gray-300'}`}>
+                          <div
+                            className={`h-6 ${isWinner ? 'bg-secondary-orange' : 'bg-accent-light'} shadow-md`}
+                            style={{ width: `${pct}%`, minWidth: pct === 0 ? '6px' : undefined }}
+                          />
+                        </div>
+                        <div className={`w-16 text-sm text-right ${isWinner ? 'text-secondary-orange' : 'text-gray-900'}`}>{count} ({pct}%)</div>
+                      </div>
+                      {/* Voters for this card */}
+                      {voters.length > 0 && (
+                        <div className="flex flex-wrap items-center ml-12 mb-1">
+                          {voters}
+                        </div>
+                      )}
+                      {separator && (
+                        <div className="my-2 border-t-2 border-secondary-orange opacity-70" />
+                      )}
+                    </React.Fragment>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Voting Cards Footer (in-flow so it occupies space and won't overlap) */}
+      {!sessionData.revealed && (
+        <div className="shadow-lg h-28 border-t bg-accent-light backdrop-blur-sm mt-auto">
+          <div className="max-w-7xl mx-auto h-full flex flex-col justify-center">
+            <div className="flex justify-center gap-2 flex-wrap">
+              {FIBONACCI_VALUES.map((value) => (
+                <button
+                  key={value}
+                  onClick={() => handleVote(value)}
+                  className={`w-14 h-20 rounded-lg shadow-lg font-bold text-lg transition-all duration-200 transform hover:scale-105 hover:-translate-y-1 ${players[currentUser]?.vote === value
+                    ? 'bg-secondary-orange text-white scale-105 -translate-y-1'
+                    : 'bg-white text-gray-900 hover:bg-accent-light'
+                    }`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-export default App;
