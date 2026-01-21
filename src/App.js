@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
 
 // TODO: Replace with your Firebase config from Firebase Console
 const firebaseConfig = {
@@ -26,6 +26,7 @@ export default function PokerPlanningApp() {
   const [players, setPlayers] = useState({});
   const [sessionData, setSessionData] = useState({ revealed: false, storyTitle: '' });
   const [storyTitleInput, setStoryTitleInput] = useState('');
+  const [sessionHistory, setSessionHistory] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Listen to all players in real-time
@@ -53,6 +54,10 @@ export default function PokerPlanningApp() {
           const data = docSnap.data();
           setSessionData(data);
           setStoryTitleInput(data.storyTitle || '');
+          // Sync sessionHistory with Firebase
+          if (data.sessionHistory) {
+            setSessionHistory(data.sessionHistory);
+          }
         }
       }
     );
@@ -322,6 +327,38 @@ export default function PokerPlanningApp() {
       y: 50 + radius * Math.sin(angle),
     };
   } 
+
+  const hasCurrentStoryTitle = (sessionData.storyTitle || '').trim().length > 0;
+  const isCurrentStorySaved = hasCurrentStoryTitle && sessionHistory.some((h) => h.storyTitle === sessionData.storyTitle);
+
+  const handleSaveVotingResult = async () => {
+    if (!sessionData.revealed || !stats) return;
+    if (!hasCurrentStoryTitle) {
+      alert('Ingresa el nombre de la historia para guardar la votación');
+      return;
+    }
+    if (isCurrentStorySaved) return;
+
+    const entry = {
+      storyTitle: sessionData.storyTitle,
+      mode: stats.mode,
+      agreement: stats.agreement,
+      average: stats.average,
+      totalVotes: stats.totalVotes,
+      totalPlayers: stats.totalPlayers,
+      votes: playersList.map(p => ({ name: p.name, vote: p.vote })),
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedHistory = [...sessionHistory, entry];
+
+    await setDoc(doc(db, 'sessions', SESSION_ID), {
+      sessionHistory: updatedHistory
+    }, { merge: true });
+
+    setSessionHistory(updatedHistory);
+  };
+
   return (
     <div className="h-screen flex flex-col mainBG gap-4">
       {/* Alert: Only one player left to vote */}
@@ -344,6 +381,21 @@ export default function PokerPlanningApp() {
 
       {/* Story Title Input */}
       {/* Main Game Area + Vote Distribution Side-by-Side */}
+    {  console.log(sessionHistory.length) }
+      {sessionHistory.length > 0 && (
+        <div className="fixed left-4 top-24 z-30 bg-white/95 border border-secondary-orange rounded-lg shadow-md p-3 w-64 max-h-72 overflow-auto">
+          <div className="text-sm font-bold text-secondary-orange mb-2">Historias guardadas</div>
+          <div className="space-y-2">
+            {sessionHistory.map((item, idx) => (
+              <div key={`${item.storyTitle}-mini-${idx}`} className="border border-orange-200 rounded-md p-2 bg-white">
+                <div className="text-sm font-semibold text-gray-900 truncate" title={item.storyTitle}>{item.storyTitle}</div>
+                <div className="text-xs text-gray-700 mt-1">Más votado: <span className="font-bold text-secondary-orange">{item.mode || '-'}</span></div>
+                <div className="text-[11px] text-gray-600 mt-1">{item.totalVotes} / {item.totalPlayers} votos · {item.average} prom</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="w-full flex flex-col items-center mt-5">
         <input
           type="text"
@@ -356,12 +408,16 @@ export default function PokerPlanningApp() {
       </div>
       {/* Main Game Area + Vote Distribution Side-by-Side */}
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-12 overflow-auto">
+
         {/* Results Card - Displayed Above Table when Revealed */}
         {sessionData.revealed && stats && (
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full border-2 border-secondary-orange mb-6">
             <div className="text-center space-y-3">
               <div className="text-2xl font-bold text-secondary-orange">{stats?.mode || '-'}</div>
               <div className="text-lg font-semibold text-gray-800">Más Votado</div>
+              {hasCurrentStoryTitle && (
+                <div className="text-sm text-gray-600 font-semibold" title={sessionData.storyTitle}>Historia: {sessionData.storyTitle}</div>
+              )}
               <div className="text-sm space-y-1 text-gray-700">
                 <p className="font-semibold">{stats?.agreement}% Acuerdo</p>
                 <p>Promedio: {stats?.average}</p>
@@ -472,11 +528,18 @@ export default function PokerPlanningApp() {
       {/* Vote Distribution (floating panel on desktop, below on mobile) */}
       {sessionData.revealed && totalVotes > 0 && (
         <div
-          className="fixed md:absolute z-30 right-0 md:right-8 top-auto md:top-1/2 md:-translate-y-1/2 w-full md:w-80 max-w-full md:max-w-xs mt-6 md:mt-0 flex-shrink-0 pointer-events-none md:pointer-events-auto"
+          className="fixed md:absolute z-30 right-0 md:right-8 top-auto md:top-1/2 md:-translate-y-1/2 w-full md:w-80 max-w-full md:max-w-xs mt-6 md:mt-0 flex-shrink-0 pointer-events-auto"
           style={{ bottom: '9.5rem' }}
         >
           <div className="bg-accent-light p-4 rounded-lg border border-secondary-orange shadow-2xl backdrop-blur-md">
-            <h3 className="text-secondary-orange font-semibold mb-3">Distribución de votos</h3>
+            <div className="flex items-start justify-between mb-3 gap-2">
+              <div>
+                <h3 className="text-secondary-orange font-semibold">Distribución de votos</h3>
+                {hasCurrentStoryTitle && (
+                  <div className="text-xs text-gray-800 font-semibold truncate" title={sessionData.storyTitle}>Historia: {sessionData.storyTitle}</div>
+                )}
+              </div>
+            </div>
             <div className="space-y-3">
               {(() => {
                 // Find the last winner index (after sorting winners to top)
@@ -506,7 +569,7 @@ export default function PokerPlanningApp() {
                             style={{ width: `${pct}%`, minWidth: pct === 0 ? '6px' : undefined }}
                           />
                         </div>
-                        <div className={`w-16 text-sm text-right ${isWinner ? 'text-secondary-orange' : 'text-gray-900'}`}>{count > 1 ? 'votos' : 'voto'} ({pct}%)</div>
+                        <div className={`w-16 text-sm text-right ${isWinner ? 'text-secondary-orange' : 'text-gray-900'}`}>{count} ({pct}%)</div>
                       </div>
                       {/* Voters for this card */}
                       {voters.length > 0 && (
@@ -521,6 +584,19 @@ export default function PokerPlanningApp() {
                   );
                 });
               })()}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={handleSaveVotingResult}
+                disabled={isCurrentStorySaved}
+                className={`text-xs font-semibold px-4 py-2 rounded-md border ${isCurrentStorySaved
+                  ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed'
+                  : 'bg-secondary-orange text-white border-secondary-orange hover:bg-orange-500'}
+                `}
+                title={hasCurrentStoryTitle ? '' : 'Ingresa el nombre de la historia para guardar la votación'}
+              >
+                Guardar votación
+              </button>
             </div>
           </div>
         </div>
