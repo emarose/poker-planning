@@ -27,6 +27,7 @@ export default function PokerPlanningApp() {
   const [players, setPlayers] = useState({});
   const [sessionData, setSessionData] = useState({ revealed: false, storyTitle: '' });
   const [storyTitleInput, setStoryTitleInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Listen to all players in real-time
   useEffect(() => {
@@ -68,7 +69,12 @@ export default function PokerPlanningApp() {
 
   // Add current user to Firestore
   const handleNameSubmit = async (e) => {
+    setLoading(true);
     e?.preventDefault();
+    if(nameInput.trim() === '') {
+      setLoading(false);
+      return alert('Por favor ingresa un nombre válido.');
+    }
     if (nameInput.trim()) {
       const userName = nameInput.trim();
       // If this is the first player joining, ensure session starts as a new round
@@ -85,6 +91,7 @@ export default function PokerPlanningApp() {
         timestamp: serverTimestamp()
       });
     }
+    setLoading(false);
   };
 
   // Update vote in Firestore
@@ -207,11 +214,12 @@ export default function PokerPlanningApp() {
   // Name Entry Screen
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-orange-800 to-orange-400 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full">
           <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
-            🃏 Poker Planning
+            🃏 Planning Poker 
           </h1>
+          <h3 className="text-2xl font-bold text-center mb-6 text-gray-800">Medifé App</h3>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -222,19 +230,31 @@ export default function PokerPlanningApp() {
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleNameSubmit()}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg"
                 placeholder="Tu nombre..."
                 autoFocus
+                required
+                disabled={loading}
               />
             </div>
             <button
               onClick={handleNameSubmit}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+              disabled={loading}
             >
-              Join Session
+              {loading ? 'Uniendo...' : 'Unirse'}
             </button>
+            {loading && (
+              <div className="flex justify-center items-center mt-2">
+                <svg className="animate-spin h-5 w-5 text-orange-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                </svg>
+                <span className="text-orange-600 font-semibold">Uniendo...</span>
+              </div>
+            )}
           </div>
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+          <div className="mt-6 p-4 bg-orange-50 rounded-lg">
             <div className="text-sm text-gray-600 text-center">
               <div className="font-semibold mb-1">👥 Participantes activos: {Object.keys(players).length}</div>
               <div className="text-xs">
@@ -260,6 +280,7 @@ export default function PokerPlanningApp() {
     const y = 50 + radius * Math.sin(angle);
     return { x, y };
   };
+
   // Prepare vote counts for the distribution visualization
   // Build voteCounts and voteToPlayers for distribution panel
   const voteCounts = {};
@@ -300,9 +321,9 @@ export default function PokerPlanningApp() {
       )}
 
       {/* Header */}
-      <div className="bg-secondary-orange/80 backdrop-blur-sm text-white p-4 shadow-lg">
+      <div className="bg-orange-400 backdrop-blur-sm text-white p-4 shadow-lg">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">🃏 Poker Planning</h1>
+          <h1 className="text-2xl font-bold">🃏Planning Poker </h1>
           <div className="text-sm">
             <span className="font-semibold">{currentUser}</span>
             <span className="ml-4 opacity-75">👥 {playersList.length} participantes</span>
@@ -311,17 +332,17 @@ export default function PokerPlanningApp() {
       </div>
 
       {/* Story Title Input */}
-      <div className="w-full flex flex-col items-center mt-4 mb-2">
+      {/* Main Game Area + Vote Distribution Side-by-Side */}
+      <div className="w-full flex flex-col items-center bg-orange-900 pt-5">
         <input
           type="text"
           value={storyTitleInput}
           onChange={handleStoryTitleChange}
           placeholder="Ingresa el título de la historia en votación"
-          className="w-full max-w-md px-4 py-2 rounded border border-secondary-orange focus:ring-2 focus:ring-secondary-orange focus:border-transparent text-lg text-center mb-2 text-secondary-orange bg-secondary-light"
+          className="w-full max-w-md px-4 py-2 rounded border border-secondary-orange focus:ring-0 focus:ring-secondary-orange focus:border-transparent text-lg text-center mb-2 "
         />
       </div>
-      {/* Main Game Area + Vote Distribution Side-by-Side */}
-      <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-6 overflow-auto">
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-6 overflow-auto bg-orange-900">
         <div className="relative w-full max-w-2xl aspect-square flex-shrink-0">
           {/* Poker Table */}
           <div className="absolute inset-0 flex items-center justify-center">
@@ -337,7 +358,7 @@ export default function PokerPlanningApp() {
                     <button
                       onClick={handleReveal}
                       disabled={playersList.filter(p => p.vote !== null).length === 0}
-                      className="bg-secondary-orange hover:bg-accent-light disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-full text-xl shadow-lg transition duration-200 transform hover:scale-105"
+                      className="bg-secondary-orange hover:bg-orange-500 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-full text-xl shadow-lg transition duration-100 transform hover:scale-105"
                     >
                       🎭 Revelar
                     </button>
@@ -390,8 +411,8 @@ export default function PokerPlanningApp() {
                         ? player.vote
                         : (
                           <span className="flex flex-col items-center">
-                            <span className="text-3xl">✔️</span>
-                            <span className="text-xs mt-1 text-green-700 font-semibold">Listo</span>
+                            <span className="text-2xl">✔️</span>
+                            <span className="text-s mt-1 text-green-900 font-semibold">Listo</span>
                           </span>
                         )
                       : '?'}
@@ -469,6 +490,7 @@ export default function PokerPlanningApp() {
           </div>
         </div>
       )}
+      
       {/* Voting Cards Footer (in-flow so it occupies space and won't overlap) */}
       {!sessionData.revealed && (
         <div className="shadow-lg h-28 border-t bg-accent-light backdrop-blur-sm mt-auto">
