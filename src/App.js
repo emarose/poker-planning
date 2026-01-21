@@ -75,8 +75,16 @@ export default function PokerPlanningApp() {
       setLoading(false);
       return alert('Por favor ingresa un nombre válido.');
     }
+    
+    const userName = nameInput.trim();
+    
+    // Check if a player with the same name already exists
+    if (players[userName]) {
+      setLoading(false);
+      return alert(`El nombre "${userName}" ya está en la sesión. Por favor elige otro nombre.`);
+    }
+    
     if (nameInput.trim()) {
-      const userName = nameInput.trim();
       // If this is the first player joining, ensure session starts as a new round
       if (Object.keys(players).length === 0) {
         await setDoc(doc(db, 'sessions', SESSION_ID), { revealed: false }).catch(() => { });
@@ -272,14 +280,6 @@ export default function PokerPlanningApp() {
   const stats = sessionData.revealed ? calculateStats() : null;
   const playersList = Object.values(players);
 
-  // Position players around the table
-  const getPlayerPosition = (index, total) => {
-    const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
-    const radius = 45;
-    const x = 50 + radius * Math.cos(angle);
-    const y = 50 + radius * Math.sin(angle);
-    return { x, y };
-  };
 
   // Prepare vote counts for the distribution visualization
   // Build voteCounts and voteToPlayers for distribution panel
@@ -309,8 +309,11 @@ export default function PokerPlanningApp() {
 
   // Show alert if only one player left to vote and not revealed
   const showOneLeftAlert = !sessionData.revealed && notVotedPlayers.length === 1;
+  
   const oneLeftName = showOneLeftAlert ? notVotedPlayers[0].name?.replace(/\b\w/g, c => c.toUpperCase()) : '';
-  /* function getPlayerPosition(index, total) {
+  
+  // Position players around the table
+  function getPlayerPosition(index, total) {
     const angle = (2 * Math.PI * index) / total - Math.PI / 2;
 
     const radius = 48; // % of container (outside the table)
@@ -319,7 +322,7 @@ export default function PokerPlanningApp() {
       x: 50 + radius * Math.cos(angle),
       y: 50 + radius * Math.sin(angle),
     };
-  } */
+  } 
   return (
     <div className="h-screen flex flex-col mainBG gap-4">
       {/* Alert: Only one player left to vote */}
@@ -342,7 +345,7 @@ export default function PokerPlanningApp() {
 
       {/* Story Title Input */}
       {/* Main Game Area + Vote Distribution Side-by-Side */}
-      <div className="w-full flex flex-col items-center bg-orange-900 pt-5">
+      <div className="w-full flex flex-col items-center bg-white/10 pt-5">
         <input
           type="text"
           value={storyTitleInput}
