@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
+import './App.css';
 // Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, serverTimestamp } from 'firebase/firestore';
@@ -310,9 +310,18 @@ export default function PokerPlanningApp() {
   // Show alert if only one player left to vote and not revealed
   const showOneLeftAlert = !sessionData.revealed && notVotedPlayers.length === 1;
   const oneLeftName = showOneLeftAlert ? notVotedPlayers[0].name?.replace(/\b\w/g, c => c.toUpperCase()) : '';
+  /* function getPlayerPosition(index, total) {
+    const angle = (2 * Math.PI * index) / total - Math.PI / 2;
 
+    const radius = 48; // % of container (outside the table)
+
+    return {
+      x: 50 + radius * Math.cos(angle),
+      y: 50 + radius * Math.sin(angle),
+    };
+  } */
   return (
-    <div className="h-screen bg-orange-950 flex flex-col mainBG">
+    <div className="h-screen flex flex-col mainBG gap-4">
       {/* Alert: Only one player left to vote */}
       {showOneLeftAlert && (
         <div className="fixed left-0 top-1/4 z-40 bg-secondary-orange text-white font-bold px-6 py-4 rounded-r-lg shadow-lg text-lg flex items-center animate-pulse" style={{ minWidth: '220px' }}>
@@ -326,7 +335,7 @@ export default function PokerPlanningApp() {
           <h1 className="text-2xl font-bold">🃏Planning Poker </h1>
           <div className="text-sm">
             <span className="font-semibold">{currentUser}</span>
-            <span className="ml-4 opacity-75">👥 {playersList.length} participantes</span>
+            <span className="ml-4">👥 {playersList.length} participantes</span>
           </div>
         </div>
       </div>
@@ -339,16 +348,17 @@ export default function PokerPlanningApp() {
           value={storyTitleInput}
           onChange={handleStoryTitleChange}
           placeholder="Ingresa el título de la historia en votación"
-          className="w-full max-w-md px-4 py-2 rounded border border-secondary-orange focus:ring-0 focus:ring-secondary-orange focus:border-transparent text-lg text-center mb-2 "
+          className="w-full max-w-md rounded p-1 mb-4"
         />
       </div>
-      <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-6 overflow-auto bg-orange-900">
-        <div className="relative w-full max-w-2xl aspect-square flex-shrink-0">
-          {/* Poker Table */}
+      {/* Main Game Area + Vote Distribution Side-by-Side */}
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-6 overflow-auto">
+        <div className="relative w-full max-w-3xl h-64 flex-shrink-0 flex items-center justify-center">
+          {/* Pill-shaped Poker Table */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-3/4 h-3/4 bg-table-wood rounded-full border-[10px] border-table-rim shadow-2xl flex items-center justify-center">
-              <div className="w-[90%] h-[90%] bg-table-felt rounded-full flex items-center justify-center shadow-inner">
-                <div className="text-center">
+            <div className="w-full h-3/4 max-w-3xl bg-table-wood rounded-full border-[10px] border-table-rim shadow-2xl flex items-center justify-center">
+              <div className="w-[97%] h-[80%] bg-table-felt rounded-full flex items-center justify-center shadow-inner">
+                <div className="text-center px-4">
                   {sessionData.storyTitle && (
                     <div className="text-lg font-semibold text-white mb-2 truncate max-w-xs mx-auto" title={sessionData.storyTitle}>
                       {sessionData.storyTitle}
@@ -383,8 +393,7 @@ export default function PokerPlanningApp() {
               </div>
             </div>
           </div>
-
-          {/* Player Cards */}
+          {/* Player Cards in a horizontal row */}
           {playersList.map((player, index) => {
             const pos = getPlayerPosition(index, playersList.length);
             const hasVoted = player.vote !== null && player.vote !== undefined;
@@ -393,17 +402,17 @@ export default function PokerPlanningApp() {
             return (
               <div
                 key={player.name}
-                className="absolute transform -translate-x-1/2 -translate-y-1/2"
+                className="absolute -translate-x-1/2 -translate-y-1/2"
                 style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
               >
-                <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col items-center gap-1.5">
                   {/* Card */}
                   <div
-                    className={`w-16 h-24 rounded-lg shadow-lg flex items-center justify-center font-bold text-xl transition-all duration-300 ${hasVoted
-                        ? sessionData.revealed
-                          ? 'bg-white text-gray-900'
-                          : 'bg-white text-secondary-orange border-2 border-secondary-orange'
-                        : 'bg-white/20 text-white/40 border-2 border-white/40 border-dashed'
+                    className={`w-14 h-20 rounded-lg shadow-lg flex items-center justify-center font-bold text-lg transition-all duration-300 ${hasVoted
+                      ? sessionData.revealed
+                        ? 'bg-white text-gray-900'
+                        : 'bg-white text-secondary-orange border-2 border-secondary-orange'
+                      : 'bg-white/20 text-white/40 border-2 border-white/40 border-dashed'
                       }`}
                   >
                     {hasVoted
@@ -417,13 +426,14 @@ export default function PokerPlanningApp() {
                         )
                       : '?'}
                   </div>
+
                   {/* Name */}
                   <div
-                    className={`text-base font-semibold px-4 py-2 rounded-full ${isCurrentUser
-                      ? 'bg-secondary-orange text-white'
-                      : 'bg-white/90 text-gray-900'
+                    className={`text-sm font-semibold px-4 py-2 rounded-full whitespace-nowrap overflow-hidden text-ellipsis ${isCurrentUser
+                        ? 'bg-secondary-orange text-white'
+                        : 'bg-white/90 text-gray-900'
                       }`}
-                    style={{ minWidth: 60, minHeight: 32 }}
+                    style={{ maxWidth: 140 }}
                   >
                     {player?.name?.replace(/\b\w/g, c => c.toUpperCase())}
                   </div>
