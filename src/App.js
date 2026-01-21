@@ -257,7 +257,7 @@ export default function PokerPlanningApp() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
                 </svg>
-                <span className="text-orange-600 font-semibold">Uniendo...</span>
+                <span className="text-orange-600 font-semibold">Uniendote...</span>
               </div>
             )}
           </div>
@@ -315,7 +315,7 @@ export default function PokerPlanningApp() {
   function getPlayerPosition(index, total) {
     const angle = (2 * Math.PI * index) / total - Math.PI / 2;
 
-    const radius = 48; // % of container (outside the table)
+    const radius = 65; // % of container (outside the table) - increased to prevent overlap
 
     return {
       x: 50 + radius * Math.cos(angle),
@@ -344,29 +344,67 @@ export default function PokerPlanningApp() {
 
       {/* Story Title Input */}
       {/* Main Game Area + Vote Distribution Side-by-Side */}
-      <div className="w-full flex flex-col items-center bg-white/10 pt-5">
+      <div className="w-full flex flex-col items-center mt-5">
         <input
           type="text"
+          
           value={storyTitleInput}
           onChange={handleStoryTitleChange}
           placeholder="Ingresa el título de la historia en votación"
-          className="w-full max-w-md rounded p-1 mb-4"
+          className="text-center w-full max-w-md rounded p-1 mb-4"
         />
       </div>
       {/* Main Game Area + Vote Distribution Side-by-Side */}
-      <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-6 overflow-auto">
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-12 overflow-auto">
+        {/* Results Card - Displayed Above Table when Revealed */}
+        {sessionData.revealed && stats && (
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full border-2 border-secondary-orange mb-6">
+            <div className="text-center space-y-3">
+              <div className="text-2xl font-bold text-secondary-orange">{stats?.mode || '-'}</div>
+              <div className="text-lg font-semibold text-gray-800">Más Votado</div>
+              <div className="text-sm space-y-1 text-gray-700">
+                <p className="font-semibold">{stats?.agreement}% Acuerdo</p>
+                <p>Promedio: {stats?.average}</p>
+                <p>{stats?.totalVotes} / {stats?.totalPlayers} votaron</p>
+              </div>
+              <button
+                onClick={handleNewRound}
+                className="mt-4 w-full bg-secondary-orange hover:bg-orange-500 text-white font-semibold py-3 px-6 rounded-full text-base transition duration-200 transform hover:scale-105"
+              >
+                🔄 Reiniciar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Player Voting Cards Row - Displayed when Revealed */}
+        {sessionData.revealed && (
+          <div className="w-full flex justify-center px-4">
+            <div className="flex flex-wrap justify-center gap-4 max-w-6xl">
+              {playersList.map((player) => (
+                <div key={player.name} className="flex flex-col items-center gap-2">
+                  {/* Vote Card */}
+                  <div className="w-16 h-24 bg-white rounded-lg shadow-lg flex items-center justify-center font-bold text-2xl text-secondary-orange border-2 border-secondary-orange">
+                    {player.vote || '-'}
+                  </div>
+                  {/* Player Name */}
+                  <div className="text-sm font-semibold px-3 py-2 bg-secondary-orange text-white rounded-full whitespace-nowrap text-center max-w-[120px] overflow-hidden text-ellipsis">
+                    {player?.name?.replace(/\b\w/g, c => c.toUpperCase())}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {!sessionData.revealed && (
         <div className="relative w-full max-w-3xl h-64 flex-shrink-0 flex items-center justify-center">
           {/* Pill-shaped Poker Table */}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-full h-3/4 max-w-3xl bg-table-wood rounded-full border-[10px] border-table-rim shadow-2xl flex items-center justify-center">
-              <div className="w-[97%] h-[80%] bg-table-felt rounded-full flex items-center justify-center shadow-inner">
+              <div className="w-[97%] h-[85%] bg-table-felt rounded-full flex items-center justify-center shadow-inner">
                 <div className="text-center px-4">
-                  {sessionData.storyTitle && (
-                    <div className="text-lg font-semibold text-white mb-2 truncate max-w-xs mx-auto" title={sessionData.storyTitle}>
-                      {sessionData.storyTitle}
-                    </div>
-                  )}
-                  {!sessionData.revealed ? (
+                  {!sessionData.revealed && (
                     <button
                       onClick={handleReveal}
                       disabled={playersList.filter(p => p.vote !== null).length === 0}
@@ -374,22 +412,6 @@ export default function PokerPlanningApp() {
                     >
                       🎭 Revelar
                     </button>
-                  ) : (
-                    <div className="text-white space-y-3">
-                      <div className="text-4xl font-bold">{stats?.mode || '-'}</div>
-                      <div className="text-lg font-semibold">Más Votado</div>
-                      <div className="text-sm space-y-1">
-                        <p>{stats?.agreement}% Acuerdo</p>
-                        <p>Promedio: {stats?.average}</p>
-                        <p>{stats?.totalVotes} / {stats?.totalPlayers} votaron</p>
-                      </div>
-                      <button
-                        onClick={handleNewRound}
-                        className="mt-4 bg-secondary-orange hover:bg-accent-light text-white font-semibold py-2 px-6 rounded-full text-sm transition duration-200"
-                      >
-                        Reiniciar
-                      </button>
-                    </div>
                   )}
                 </div>
               </div>
@@ -407,14 +429,14 @@ export default function PokerPlanningApp() {
                 className="absolute -translate-x-1/2 -translate-y-1/2"
                 style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
               >
-                <div className="flex flex-col items-center gap-1.5">
+                <div className="flex flex-col items-center gap-2">
                   {/* Card */}
                   <div
                     className={`w-14 h-20 rounded-lg shadow-lg flex items-center justify-center font-bold text-lg transition-all duration-300 ${hasVoted
                       ? sessionData.revealed
                         ? 'bg-white text-gray-900'
                         : 'bg-white text-secondary-orange border-2 border-secondary-orange'
-                      : 'bg-white/20 text-white/40 border-2 border-white/40 border-dashed'
+                      : 'bg-white/40 text-white/40 border-2 border-white/40 border-dashed'
                       }`}
                   >
                     {hasVoted
@@ -431,7 +453,7 @@ export default function PokerPlanningApp() {
 
                   {/* Name */}
                   <div
-                    className={`text-sm font-semibold px-4 py-2 rounded-full whitespace-nowrap overflow-hidden text-ellipsis ${isCurrentUser
+                    className={`text-sm font-semibold px-5 py-3 rounded-full whitespace-nowrap overflow-hidden text-ellipsis ${isCurrentUser
                         ? 'bg-secondary-orange text-white'
                         : 'bg-white/90 text-gray-900'
                       }`}
@@ -444,13 +466,14 @@ export default function PokerPlanningApp() {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Vote Distribution (floating panel on desktop, below on mobile) */}
       {sessionData.revealed && totalVotes > 0 && (
         <div
           className="fixed md:absolute z-30 right-0 md:right-8 top-auto md:top-1/2 md:-translate-y-1/2 w-full md:w-80 max-w-full md:max-w-xs mt-6 md:mt-0 flex-shrink-0 pointer-events-none md:pointer-events-auto"
-          style={{ bottom: '6.5rem' }}
+          style={{ bottom: '9.5rem' }}
         >
           <div className="bg-accent-light p-4 rounded-lg border border-secondary-orange shadow-2xl backdrop-blur-md">
             <h3 className="text-secondary-orange font-semibold mb-3">Distribución de votos</h3>
@@ -464,7 +487,7 @@ export default function PokerPlanningApp() {
                   // Separator after last winner if there are non-winners
                   const separator = winnerCount > 0 && idx === winnerCount - 1 && voteEntries.length > winnerCount;
                   const voters = (voteToPlayers[val] || []).map(name => (
-                    <span key={name} className="text-yellow-400 text-xs font-semibold mr-2">
+                    <span key={name} className="text-orange-500 text-xs font-semibold mr-2 border border-orange-500 px-2 py-1 rounded-full bg-white/10 mb-1 inline-block">
                       {name?.replace(/\b\w/g, c => c.toUpperCase())}
                     </span>
                   ));
@@ -483,11 +506,11 @@ export default function PokerPlanningApp() {
                             style={{ width: `${pct}%`, minWidth: pct === 0 ? '6px' : undefined }}
                           />
                         </div>
-                        <div className={`w-16 text-sm text-right ${isWinner ? 'text-secondary-orange' : 'text-gray-900'}`}>{count} ({pct}%)</div>
+                        <div className={`w-16 text-sm text-right ${isWinner ? 'text-secondary-orange' : 'text-gray-900'}`}>{count > 1 ? 'votos' : 'voto'} ({pct}%)</div>
                       </div>
                       {/* Voters for this card */}
                       {voters.length > 0 && (
-                        <div className="flex flex-wrap items-center ml-12 mb-1">
+                        <div className="flex flex-wrap items-center ml-12 mb-1 ">
                           {voters}
                         </div>
                       )}
@@ -505,7 +528,7 @@ export default function PokerPlanningApp() {
       
       {/* Voting Cards Footer (in-flow so it occupies space and won't overlap) */}
       {!sessionData.revealed && (
-        <div className="shadow-lg h-28 border-t bg-accent-light backdrop-blur-sm mt-auto">
+        <div className="shadow-lg h-32 border-t bg-accent-light backdrop-blur-sm mt-auto pb-4">
           <div className="max-w-7xl mx-auto h-full flex flex-col justify-center">
             <div className="flex justify-center gap-2 flex-wrap">
               {FIBONACCI_VALUES.map((value) => (
