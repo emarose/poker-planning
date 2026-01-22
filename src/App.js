@@ -91,7 +91,7 @@ export default function PokerPlanningApp() {
     if (nameInput.trim()) {
       // If this is the first player joining, ensure session starts as a new round
       if (Object.keys(players).length === 0) {
-        await setDoc(doc(db, 'sessions', SESSION_ID), { revealed: false }).catch(() => { });
+        await setDoc(doc(db, 'sessions', SESSION_ID), { revealed: false }, { merge: true }).catch(() => { });
       }
 
       setCurrentUser(userName);
@@ -121,15 +121,15 @@ export default function PokerPlanningApp() {
   const handleReveal = async () => {
     await setDoc(doc(db, 'sessions', SESSION_ID), {
       revealed: true
-    });
+    }, { merge: true });
   };
 
   // Start new round
   const handleNewRound = async () => {
-    // Reset revealed status
+    // Reset revealed status (preserve other fields via merge)
     await setDoc(doc(db, 'sessions', SESSION_ID), {
       revealed: false
-    });
+    }, { merge: true });
 
     // Clear all votes
     const playerNames = Object.keys(players);
@@ -350,13 +350,11 @@ export default function PokerPlanningApp() {
       createdAt: new Date().toISOString()
     };
 
-    const updatedHistory = [...sessionHistory, entry];
-
     await setDoc(doc(db, 'sessions', SESSION_ID), {
-      sessionHistory: updatedHistory
+      sessionHistory: arrayUnion(entry)
     }, { merge: true });
 
-    setSessionHistory(updatedHistory);
+    setSessionHistory((prev) => [...prev, entry]);
   };
 
   return (
@@ -381,7 +379,7 @@ export default function PokerPlanningApp() {
 
       {/* Story Title Input */}
       {/* Main Game Area + Vote Distribution Side-by-Side */}
-    {  console.log(sessionHistory.length) }
+    
       {sessionHistory.length > 0 && (
         <div className="fixed left-4 top-24 z-30 bg-white/95 border border-secondary-orange rounded-lg shadow-md p-3 w-64 max-h-72 overflow-auto">
           <div className="text-sm font-bold text-secondary-orange mb-2">Historias guardadas</div>
