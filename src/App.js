@@ -613,7 +613,7 @@ export default function PokerPlanningApp() {
                 });
               })()}
             </div>
-            <div className="mt-4 flex justify-end">
+            {/* <div className="mt-4 flex justify-end">
               <button
                 onClick={handleSaveVotingResult}
                 disabled={isCurrentStorySaved}
@@ -625,7 +625,7 @@ export default function PokerPlanningApp() {
               >
                 Guardar votación
               </button>
-            </div>
+            </div> */}
           </div>
         </div>
       )}
