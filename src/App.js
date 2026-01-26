@@ -28,6 +28,7 @@ export default function PokerPlanningApp() {
   const [storyTitleInput, setStoryTitleInput] = useState('');
   const [sessionHistory, setSessionHistory] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 0);
 
   // Listen to all players in real-time
   useEffect(() => {
@@ -43,6 +44,13 @@ export default function PokerPlanningApp() {
     );
 
     return () => unsubscribe();
+  }, []);
+
+  // Track viewport height so we can shrink the table radius on short screens
+  useEffect(() => {
+    const handleResize = () => setViewportHeight(window.innerHeight);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Listen to session state (revealed status and story title)
@@ -320,7 +328,8 @@ export default function PokerPlanningApp() {
   function getPlayerPosition(index, total) {
     const angle = (2 * Math.PI * index) / total - Math.PI / 2;
 
-    const radius = 65; // % of container (outside the table) - increased to prevent overlap
+    // Shrink the orbit on short viewports so cards don't get clipped by the header
+    const radius = viewportHeight < 700 ? 55 : 65; // % of container
 
     return {
       x: 50 + radius * Math.cos(angle),
@@ -375,7 +384,7 @@ export default function PokerPlanningApp() {
   };
 
   return (
-    <div className="h-screen flex flex-col mainBG gap-4">
+    <div className="min-h-screen flex flex-col mainBG gap-4 overflow-y-auto">
       {/* Alert: Only one player left to vote */}
       {showOneLeftAlert && (
         <div className="fixed left-0 top-1/4 z-40 bg-secondary-orange text-white font-bold px-6 py-4 rounded-r-lg shadow-lg text-lg flex items-center animate-pulse" style={{ minWidth: '220px' }}>
@@ -424,7 +433,7 @@ export default function PokerPlanningApp() {
           </button>
         </div>
       )}
-      <div className="w-full flex flex-col items-center mt-5">
+     {/*  <div className="w-full flex flex-col items-center mt-5">
         <input
           type="text"
           
@@ -433,7 +442,7 @@ export default function PokerPlanningApp() {
           placeholder="Ingresa el título de la historia en votación"
           className="text-center w-full max-w-md rounded p-1 mb-4"
         />
-      </div>
+      </div> */}
       {/* Main Game Area + Vote Distribution Side-by-Side */}
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 pb-6 gap-12 overflow-auto">
 
